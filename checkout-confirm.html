@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment status — Marginalia</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-white px-4">
+  <div class="max-w-sm w-full border rounded-lg p-6 text-center" style="border-color:#E4E2DC">
+    <div id="spinner" class="text-4xl mb-3">⏳</div>
+    <h1 id="statusTitle" class="text-xl font-semibold mb-2">Checking your payment…</h1>
+    <p id="statusBody" class="text-sm text-gray-500 mb-5">This updates the moment your payment provider confirms it.</p>
+    <a href="/" class="inline-block px-5 py-2.5 rounded-full text-white text-sm font-medium" style="background:#2C5CB0">Back to the library</a>
+  </div>
+
+<script>
+  // API_BASE should point at your deployed backend, e.g. https://api.yourdomain.com
+  const API_BASE = "https://api.yourdomain.com";
+
+  const params = new URLSearchParams(location.search);
+  const orderId = params.get("order");
+  const token = localStorage.getItem("authToken"); // set at login — see frontend-integration.md
+
+  async function pollStatus(attempt = 0){
+    if(!orderId){
+      document.getElementById("statusTitle").textContent = "No order to check.";
+      return;
+    }
+    try{
+      const res = await fetch(`${API_BASE}/api/payments/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const order = await res.json();
+
+      if(order.status === "paid"){
+        document.getElementById("spinner").textContent = "✅";
+        document.getElementById("statusTitle").textContent = "Payment confirmed";
+        document.getElementById("statusBody").textContent = `"${order.title}" is yours — thank you.`;
+        return;
+      }
+      if(order.status === "failed" || order.status === "cancelled"){
+        document.getElementById("spinner").textContent = "⚠️";
+        document.getElementById("statusTitle").textContent = "Payment didn't go through";
+        document.getElementById("statusBody").textContent = "Nothing was charged. You can try again from the book's page.";
+        return;
+      }
+      // still pending — keep polling for up to ~2 minutes (mobile money confirmations can take a moment)
+      if(attempt < 40){
+        setTimeout(()=>pollStatus(attempt+1), 3000);
+      } else {
+        document.getElementById("statusTitle").textContent = "Still waiting on confirmation";
+        document.getElementById("statusBody").textContent = "This can take a few minutes for mobile money. Refresh this page shortly.";
+      }
+    } catch(err){
+      document.getElementById("statusTitle").textContent = "Couldn't check payment status";
+      document.getElementById("statusBody").textContent = "Check your connection and refresh.";
+    }
+  }
+  pollStatus();
+</script>
+</body>
+</html>
